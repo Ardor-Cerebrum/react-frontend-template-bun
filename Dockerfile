@@ -1,10 +1,13 @@
+# Build-time arguments
+ARG BUN_VERSION=1.3.5
+
 # Build stage
-FROM oven/bun:alpine AS build
+FROM oven/bun:${BUN_VERSION}-alpine AS build
 
 WORKDIR /app
 
 # Copy package files
-COPY package.json bun.lockb* ./
+COPY package.json bun.lock* ./
 
 # Install dependencies
 RUN bun install --frozen-lockfile
