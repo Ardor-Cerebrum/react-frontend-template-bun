@@ -1,131 +1,204 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { 
-  Terminal, 
-  Layout, 
-  Paintbrush, 
-  Database, 
-  Code, 
-  CheckCircle2,
-  Rocket
-} from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Terminal, Code, Cpu, Zap, ExternalLink } from "lucide-react";
 
-const FeatureCard = ({ icon: Icon, title, description }: { icon: any, title: string, description: string }) => (
-  <Card className="border-border/50 bg-card/50 backdrop-blur-sm hover:bg-card/80 transition-colors">
-    <CardHeader className="space-y-1">
-      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-        <Icon className="h-5 w-5 text-primary" />
-      </div>
-      <CardTitle className="text-xl">{title}</CardTitle>
-      <CardDescription>{description}</CardDescription>
-    </CardHeader>
-  </Card>
-);
+const MatrixBackground = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()";
+    const fontSize = 14;
+    const columns = Math.ceil(canvas.width / fontSize);
+    const drops: number[] = new Array(columns).fill(1);
+
+    const draw = () => {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#0F0";
+      ctx.font = `${fontSize}px monospace`;
+
+      for (let i = 0; i < drops.length; i++) {
+        const text = chars[Math.floor(Math.random() * chars.length)];
+        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0;
+        }
+        drops[i]++;
+      }
+    };
+
+    const interval = setInterval(draw, 33);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("resize", resizeCanvas);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full -z-10 opacity-25 pointer-events-none" />;
+};
+
+const TypingText = ({ text, delay = 0, className = "" }: { text: string; delay?: number; className?: string }) => {
+  const [displayedText, setDisplayedText] = useState("");
+  const [started, setStarted] = useState(false);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setStarted(true), delay);
+    return () => clearTimeout(timeout);
+  }, [delay]);
+
+  useEffect(() => {
+    if (!started) return;
+    let i = 0;
+    const interval = setInterval(() => {
+      if (i < text.length) {
+        setDisplayedText(text.substring(0, i + 1));
+        i++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 50); // Slower typing for dramatic effect
+    return () => clearInterval(interval);
+  }, [started, text]);
+
+  return <span className={`font-mono ${className}`}>{displayedText}<span className="animate-pulse">_</span></span>;
+};
+
+const StatusItem = ({ label, delay }: { label: string; delay: number }) => {
+  const [status, setStatus] = useState("WAITING");
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setStatus("RUNNING"), delay);
+    const timeout2 = setTimeout(() => setStatus("OK"), delay + 800);
+    return () => {
+      clearTimeout(timeout);
+      clearTimeout(timeout2);
+    };
+  }, [delay]);
+
+  return (
+    <div className="flex items-center justify-between font-mono text-sm py-1 border-b border-green-900/30 last:border-0">
+      <span className="text-green-400/80">{label}</span>
+      <span className={`${status === "OK" ? "text-green-400" : status === "RUNNING" ? "text-yellow-400 animate-pulse" : "text-gray-600"}`}>
+        [{status}]
+      </span>
+    </div>
+  );
+};
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden selection:bg-primary/20">
-      {/* Ambient Background Effects */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-primary/5 rounded-full blur-[100px] -z-10 pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-[800px] h-[600px] bg-accent/5 rounded-full blur-[100px] -z-10 pointer-events-none" />
-
-      <div className="container max-w-6xl mx-auto px-4 py-12 md:py-24">
-        {/* Hero Section */}
-        <div className="flex flex-col items-center text-center space-y-8 mb-16">
-          <Badge variant="secondary" className="px-4 py-1.5 text-sm font-medium rounded-full animate-fade-in">
-            <span className="relative flex h-2 w-2 mr-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-            </span>
-            Environment Ready
-          </Badge>
-          
-          <div className="space-y-4 max-w-3xl">
-            <h1 className="text-4xl md:text-7xl font-bold tracking-tight">
-              Project <span className="text-primary">Initialized</span>
-            </h1>
-            <p className="text-xl md:text-2xl text-muted-foreground leading-relaxed">
-              You've successfully deployed the <span className="text-foreground font-semibold">React Frontend Template</span>.
-              Everything is set up and ready for you to build.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4">
-            <Button size="lg" className="h-12 px-8 text-base" onClick={() => window.open('https://ui.shadcn.com', '_blank')}>
-              <Layout className="mr-2 h-4 w-4" />
-              Explore Components
-            </Button>
-            <Button size="lg" variant="outline" className="h-12 px-8 text-base" onClick={() => window.open('https://react.dev', '_blank')}>
-              <Code className="mr-2 h-4 w-4" />
-              Read Documentation
-            </Button>
-          </div>
-        </div>
-
-        {/* Features Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
-          <FeatureCard 
-            icon={Layout} 
-            title="Shadcn UI" 
-            description="Pre-configured with 40+ accessible components built on Radix UI." 
-          />
-          <FeatureCard 
-            icon={Paintbrush} 
-            title="Tailwind CSS" 
-            description="Utility-first CSS framework for rapid UI development." 
-          />
-          <FeatureCard 
-            icon={Database} 
-            title="React Query" 
-            description="Powerful asynchronous state management for server state." 
-          />
-          <FeatureCard 
-            icon={Rocket} 
-            title="Production Ready" 
-            description="Optimized build setup with Vite and TypeScript." 
-          />
-        </div>
-
-        {/* Getting Started Section */}
-        <div className="max-w-3xl mx-auto">
-          <Card className="bg-muted/50 border-muted">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Terminal className="h-5 w-5 text-primary" />
-                Get Started
-              </CardTitle>
-              <CardDescription>
-                Edit this page to start building your application.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="bg-background rounded-lg border p-4 font-mono text-sm flex items-center justify-between group">
-                <code className="text-primary">src/pages/Index.tsx</code>
-                <span className="text-muted-foreground text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                  Current File
-                </span>
-              </div>
-              <div className="mt-6 flex flex-col gap-2 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <span>Run <code className="bg-muted px-1 py-0.5 rounded text-foreground">bun dev</code> to start the development server</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <span>Check <code className="bg-muted px-1 py-0.5 rounded text-foreground">src/App.tsx</code> for routing configuration</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+    <div className="min-h-screen bg-black text-green-500 font-mono relative overflow-hidden selection:bg-green-500/30 selection:text-white">
+      <MatrixBackground />
+      
+      <div className="container max-w-5xl mx-auto px-4 py-12 md:py-24 relative z-10">
         
-        <div className="mt-16 text-center">
-          <p className="text-sm text-muted-foreground">
-            Built with <span className="text-red-500">❤️</span> by Ardor Cloud
+        <div className="flex flex-col items-center justify-center text-center space-y-6 mb-16">
+          <div className="inline-block border border-green-500/50 bg-black/80 backdrop-blur-sm px-4 py-2 rounded mb-4 shadow-[0_0_15px_rgba(0,255,0,0.2)]">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
+              <span className="text-xs tracking-widest uppercase">System Online</span>
+            </div>
+          </div>
+          
+          <h1 className="text-4xl md:text-7xl font-bold tracking-tighter uppercase">
+            <TypingText text="Ardor Environment" delay={200} />
+          </h1>
+          
+          <p className="max-w-2xl text-lg md:text-xl text-green-400/70">
+            Development protocols initiated. Access granted to local system.
           </p>
         </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+          
+          <Card className="bg-black/80 border-green-500/30 backdrop-blur-md shadow-[0_0_20px_rgba(0,255,0,0.1)]">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-green-500/30 bg-green-900/10">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-green-500" />
+                <span className="text-xs font-bold text-green-500">BOOT_SEQUENCE.EXE</span>
+              </div>
+              <div className="flex gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
+                <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/50" />
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500/50" />
+              </div>
+            </div>
+            <div className="p-4 space-y-2 h-[260px] overflow-y-auto font-mono text-xs md:text-sm">
+              <StatusItem label="Initializing React Core..." delay={500} />
+              <StatusItem label="Loading Tailwind Engine..." delay={1500} />
+              <StatusItem label="Connecting to Shadcn UI..." delay={2500} />
+              <StatusItem label="Mounting Virtual DOM..." delay={3500} />
+              <StatusItem label="Checking File Permissions..." delay={4500} />
+              <StatusItem label="Starting Development Server..." delay={5500} />
+              
+              <div className="mt-4 pt-4 border-t border-green-500/30 text-center animate-pulse">
+                <span className="text-green-400 font-bold">{">"} READY FOR INPUT</span>
+              </div>
+            </div>
+          </Card>
+
+          <div className="space-y-6">
+             <Card className="bg-black/40 border-green-500/20 hover:border-green-400 transition-all duration-300 group cursor-pointer relative overflow-hidden" onClick={() => {}}>
+                <div className="absolute inset-0 bg-green-500/5 translate-x-[-100%] group-hover:translate-x-0 transition-transform duration-500" />
+                <div className="p-6 relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="bg-green-500/20 p-2 rounded">
+                      <Code className="w-6 h-6 text-green-400" />
+                    </div>
+                    <ExternalLink className="w-4 h-4 opacity-50 text-green-500" />
+                  </div>
+                  <h3 className="text-xl font-bold mb-2 text-green-500 group-hover:text-green-300 transition-colors">Start Coding</h3>
+                  <p className="text-green-400/60 text-sm mb-4">
+                    Target file located at:
+                  </p>
+                  <code className="bg-green-900/20 border border-green-500/30 px-3 py-1 rounded text-sm block w-fit text-green-400">
+                    src/pages/Index.tsx
+                  </code>
+                </div>
+             </Card>
+
+             <div className="grid grid-cols-2 gap-4">
+                <Button 
+                  variant="outline" 
+                  className="h-auto py-4 bg-black/40 border-green-500/20 hover:bg-green-500/10 hover:border-green-400 text-green-400 flex flex-col items-center gap-2 group"
+                  onClick={() => window.open('https://ui.shadcn.com', '_blank')}
+                >
+                  <Cpu className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs">COMPONENTS</span>
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="h-auto py-4 bg-black/40 border-green-500/20 hover:bg-green-500/10 hover:border-green-400 text-green-400 flex flex-col items-center gap-2 group"
+                  onClick={() => window.open('https://react.dev', '_blank')}
+                >
+                  <Zap className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs">DOCS</span>
+                </Button>
+             </div>
+          </div>
+        </div>
+
+        <div className="mt-20 text-center text-xs text-green-500/30">
+          SYSTEM_ID: ARDOR_CLOUD_V2.0 // SECURE_CONNECTION_ESTABLISHED
+        </div>
+
       </div>
     </div>
   );
