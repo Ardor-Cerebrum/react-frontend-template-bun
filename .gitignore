@@ -36,3 +36,4 @@ coverage
 .env.local
 .env.*.local
 
+app_entrypoint.sh
