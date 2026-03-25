@@ -35,7 +35,7 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: parseInt(process.env.PORT),
-    allowedHosts: [".ardor.cloud"],
+    allowedHosts: [".ardor.build"],
     proxy: {
       // Proxy logs API requests to avoid CORS in development
       [proxyEndpoint]: {
