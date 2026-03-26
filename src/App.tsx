@@ -117,9 +117,9 @@ const Step3 = () => {
   const [point, setPoint] = useState({ x: 60, y: 40 });
   const svgRef = useRef(null);
 
-  const handlePointerMove = (e) => {
+  const handlePointerMove = (e: React.PointerEvent) => {
     if (!svgRef.current || e.buttons !== 1) return;
-    const rect = svgRef.current.getBoundingClientRect();
+    const rect = (svgRef.current as SVGSVGElement).getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 200 - 100;
     const y = -(((e.clientY - rect.top) / rect.height) * 200 - 100); 
     setPoint({ 
