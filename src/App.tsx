@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ChevronRight, ChevronLeft, Zap, HardDrive, CircleDot, ArrowRight, CheckCircle2, ExternalLink, Database, Cpu, Layers } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ChevronRight, ChevronLeft, Zap, HardDrive, CircleDot, ArrowRight, CheckCircle2, ExternalLink, Database, Cpu, Layers, TrendingDown, Sparkles, Scale, AlertTriangle, Lightbulb } from 'lucide-react';
 
 const Step1 = () => {
   const [memory, setMemory] = useState(10);
@@ -46,9 +46,12 @@ const Step1 = () => {
           </div>
         </div>
         
-        <p className="text-sm md:text-base text-slate-400 mt-6 border-l-2 border-rose-500/50 pl-4">
-          Векторы в кэше состоят из тысяч чисел с плавающей запятой (FP16). Для длинных текстов этот кэш может весить <b>сотни гигабайт</b>, становясь главным "бутылочным горлышком" (bottleneck) при работе ИИ.
-        </p>
+        <div className="mt-6 flex gap-4 items-start bg-rose-500/10 p-4 rounded-xl border border-rose-500/30">
+          <AlertTriangle className="text-rose-400 shrink-0 mt-1" />
+          <p className="text-sm md:text-base text-slate-300">
+            Векторы в кэше состоят из тысяч чисел с плавающей запятой (FP16). Для длинных текстов этот кэш может весить <b>сотни гигабайт</b>, становясь главным "бутылочным горлышком" (bottleneck) при работе ИИ. Это физически ограничивает размер "памяти" нейросети!
+          </p>
+        </div>
       </div>
       
       <div className="mt-auto"></div>
@@ -64,7 +67,7 @@ const Step2 = () => {
           <Layers className="text-rose-400 shrink-0 w-6 h-6 md:w-8 md:h-8" /> Иллюзия обычного сжатия
         </h2>
         <p className="text-slate-300 mb-6 text-base md:text-lg leading-relaxed">
-          Классическое решение — квантование. Мы берем "тяжелое" 16-битное число и сжимаем его до 4 бит. Но есть подвох: чтобы числа не потеряли свой масштаб (отличить 0.001 от 1000), для каждой группы чисел нужно хранить <b>дополнительные метаданные (константы масштаба)</b>.
+          Индустрия использует квантование: мы берем "тяжелое" 16-битное число и сжимаем его до 4 бит. Но есть подвох: чтобы числа не потеряли свой масштаб (отличить 0.001 от 1000), для каждой группы чисел нужно хранить <b>дополнительные метаданные (константы масштаба)</b>.
         </p>
       </div>
 
@@ -101,9 +104,13 @@ const Step2 = () => {
               <div className="absolute inset-0 opacity-20 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,#000_5px,#000_10px)]"></div>
             </div>
           </div>
-          <p className="text-sm md:text-base text-slate-300 mt-6 leading-relaxed bg-slate-900/60 p-4 md:p-5 rounded-xl border border-slate-700/80 shadow-inner">
-            Эти метаданные съедают до 1-2 дополнительных бит на каждое число! В итоге вместо желаемых 3-4 бит мы получаем 5-6. И здесь на сцену выходит <b>PolarQuant</b>.
-          </p>
+          
+          <div className="mt-6 flex gap-4 items-start bg-slate-900/80 p-4 rounded-xl border border-slate-700">
+            <Scale className="text-amber-400 shrink-0 mt-1" />
+            <p className="text-sm md:text-base text-slate-300 leading-relaxed">
+              Аномальные выбросы (выбросы-аутлаеры) в одном измерении ломают всё сжатие — приходится подстраивать масштаб под них, теряя точность для всех остальных чисел. А сами метаданные (масштаб) съедают еще 1-2 бита на каждое число. В итоге вместо 4 бит мы тратим 5-6!
+            </p>
+          </div>
         </div>
       </div>
       
@@ -113,127 +120,105 @@ const Step2 = () => {
 };
 
 const Step3 = () => {
-  const [mode, setMode] = useState('cartesian'); 
-  const [point, setPoint] = useState({ x: 60, y: 40 });
-  const svgRef = useRef(null);
+  const [isRotating, setIsRotating] = useState(false);
+  const [rotation, setRotation] = useState(0);
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!svgRef.current || e.buttons !== 1) return;
-    const rect = (svgRef.current as SVGSVGElement).getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 200 - 100;
-    const y = -(((e.clientY - rect.top) / rect.height) * 200 - 100); 
-    setPoint({ 
-      x: Math.max(-90, Math.min(90, x)), 
-      y: Math.max(-90, Math.min(90, y)) 
-    });
+  const toggleRotation = () => {
+    setIsRotating(!isRotating);
   };
 
-  const r = Math.sqrt(point.x**2 + point.y**2);
-  const theta = (Math.atan2(point.y, point.x) * 180 / Math.PI + 360) % 360;
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (isRotating) {
+      interval = setInterval(() => {
+        setRotation(prev => (prev + 2) % 360);
+      }, 50);
+    }
+    return () => clearInterval(interval);
+  }, [isRotating]);
 
   return (
     <div className="flex flex-col flex-1 animate-fade-in w-full max-w-5xl mx-auto">
       <div className="mb-4 md:mb-8">
         <h2 className="text-xl md:text-3xl font-bold mb-3 md:mb-4 flex items-center gap-3">
-          <CircleDot className="text-emerald-400 shrink-0 w-6 h-6 md:w-8 md:h-8" /> Шаг 1: PolarQuant
+          <CircleDot className="text-emerald-400 shrink-0 w-6 h-6 md:w-8 md:h-8" /> Шаг 1: Случайное вращение (Размазывание)
         </h2>
         <p className="text-slate-300 text-base md:text-lg leading-relaxed">
-          Вместо классической сетки (X, Y), данные переводятся в <b>полярные координаты</b>: Радиус и Угол. Угол всегда заперт в рамках от 0° до 360° — мы заранее знаем его точные границы! Это позволяет нарезать данные на куски без сохранения дополнительных констант масштаба (Zero Overhead).
+          Чтобы избавиться от аномальных выбросов и необходимости хранить "масштаб", алгоритм делает гениальную вещь: он <b>случайно вращает весь вектор</b> в многомерном пространстве.
         </p>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6 md:gap-10 items-center justify-center flex-1 my-4">
-        {/* Interactive Graph */}
-        <div className="w-full md:w-1/2 flex flex-col items-center max-w-sm">
-          <div className="flex bg-slate-900 p-1.5 rounded-xl mb-6 border border-slate-700 shadow-inner w-full">
-            <button onClick={() => setMode('cartesian')} className={`flex-1 px-4 py-2.5 rounded-lg text-sm md:text-base font-medium transition-all ${mode === 'cartesian' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-              Декартовы (X, Y)
-            </button>
-            <button onClick={() => setMode('polar')} className={`flex-1 px-4 py-2.5 rounded-lg text-sm md:text-base font-medium transition-all ${mode === 'polar' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-              Полярные (R, θ)
-            </button>
-          </div>
-          
-          <div className="relative w-full aspect-square bg-slate-950 rounded-2xl border-2 border-slate-700 overflow-hidden cursor-crosshair shadow-[0_0_30px_rgba(0,0,0,0.5)] shrink-0 group"
-               style={{ touchAction: 'none' }}
-               ref={svgRef}
-               onPointerDown={handlePointerMove}
-               onPointerMove={handlePointerMove}>
-            <svg viewBox="-100 -100 200 200" className="w-full h-full overflow-visible">
-              <defs>
-                <filter id="glowCartesian"><feGaussianBlur stdDeviation="2" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-                <filter id="glowPolar"><feGaussianBlur stdDeviation="2" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-              </defs>
-
-              {/* Cartesian Grid */}
-              {mode === 'cartesian' && (
-                <g className="opacity-20 stroke-blue-500" strokeWidth="1.5">
-                  {[...Array(11)].map((_, i) => (
-                    <React.Fragment key={`c-${i}`}>
-                      <line x1="-100" y1={-100 + i*20} x2="100" y2={-100 + i*20} />
-                      <line x1={-100 + i*20} y1="-100" x2={-100 + i*20} y2="100" />
-                    </React.Fragment>
-                  ))}
-                </g>
-              )}
-              {/* Polar Grid */}
-              {mode === 'polar' && (
-                <g className="opacity-20 stroke-emerald-500" strokeWidth="1.5" fill="none">
-                  {[...Array(5)].map((_, i) => <circle key={`p-${i}`} cx="0" cy="0" r={(i+1)*20} />)}
-                  {[...Array(12)].map((_, i) => <line key={`a-${i}`} x1="0" y1="0" x2={Math.cos(i*Math.PI/6)*100} y2={Math.sin(i*Math.PI/6)*100} />)}
-                </g>
-              )}
-              
-              {/* Axes */}
-              <line x1="-100" y1="0" x2="100" y2="0" stroke="#475569" strokeWidth="2" />
-              <line x1="0" y1="-100" x2="0" y2="100" stroke="#475569" strokeWidth="2" />
-              
-              {/* Lines & Point */}
-              {mode === 'cartesian' ? (
-                <g filter="url(#glowCartesian)">
-                  <line x1={point.x} y1="0" x2={point.x} y2={-point.y} stroke="#3b82f6" strokeWidth="3" strokeDasharray="4 4" />
-                  <line x1="0" y1={-point.y} x2={point.x} y2={-point.y} stroke="#3b82f6" strokeWidth="3" strokeDasharray="4 4" />
-                </g>
-              ) : (
-                <g filter="url(#glowPolar)">
-                  <line x1="0" y1="0" x2={point.x} y2={-point.y} stroke="#10b981" strokeWidth="3" />
-                  <path d={`M 25 0 A 25 25 0 ${theta > 180 ? 1 : 0} 0 ${Math.cos(theta*Math.PI/180)*25} ${-Math.sin(theta*Math.PI/180)*25}`} fill="none" stroke="#10b981" strokeWidth="3" />
-                </g>
-              )}
-              <circle cx={point.x} cy={-point.y} r="6" fill={mode === 'cartesian' ? '#60a5fa' : '#34d399'} className="pointer-events-none shadow-lg transition-colors" />
-            </svg>
+      <div className="flex flex-col lg:flex-row gap-6 md:gap-10 items-center justify-center flex-1 my-4">
+        {/* Interactive Visualization */}
+        <div className="w-full lg:w-1/2 flex flex-col items-center">
+          <div className="relative w-full max-w-[300px] aspect-square bg-slate-950 rounded-2xl border-2 border-slate-700 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)] shrink-0 flex items-center justify-center">
             
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur text-slate-300 text-xs px-3 py-1.5 rounded-full border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-              Зажмите и тяните
-            </div>
+            <svg viewBox="-100 -100 200 200" className="w-full h-full overflow-visible p-8">
+              {/* Axes */}
+              <line x1="-100" y1="0" x2="100" y2="0" stroke="#334155" strokeWidth="2" />
+              <line x1="0" y1="-100" x2="0" y2="100" stroke="#334155" strokeWidth="2" />
+              
+              {/* Vector with outlier (long on X, short on Y) */}
+              <g transform={`rotate(${rotation})`} className="transition-transform duration-75">
+                {/* Outlier Vector */}
+                <line x1="0" y1="0" x2="80" y2="10" stroke="#ef4444" strokeWidth="4" strokeLinecap="round" />
+                <circle cx="80" cy="10" r="4" fill="#ef4444" />
+                
+                {/* Normal Vector */}
+                <line x1="0" y1="0" x2="-20" y2="-30" stroke="#3b82f6" strokeWidth="4" strokeLinecap="round" />
+                <circle cx="-20" cy="-30" r="4" fill="#3b82f6" />
+                
+                {/* Projections (Dashed lines to axes) */}
+                <g className="opacity-40" strokeDasharray="4 4">
+                  {/* For outlier */}
+                  <line x1="80" y1="10" x2={80 * Math.cos(rotation * Math.PI / 180) + 10 * Math.sin(rotation * Math.PI / 180)} y2="0" stroke="#ef4444" strokeWidth="2" />
+                  <line x1="80" y1="10" x2="0" y2={-80 * Math.sin(rotation * Math.PI / 180) + 10 * Math.cos(rotation * Math.PI / 180)} stroke="#ef4444" strokeWidth="2" />
+                </g>
+              </g>
+              
+              {/* Projected Values on Axes (Dynamic based on rotation) */}
+              <g>
+                {/* X Axis Projection */}
+                <circle cx={80 * Math.cos(rotation * Math.PI / 180) - 10 * Math.sin(rotation * Math.PI / 180)} cy="0" r="6" fill="#fca5a5" className="opacity-80" />
+                {/* Y Axis Projection */}
+                <circle cx="0" cy={80 * Math.sin(rotation * Math.PI / 180) + 10 * Math.cos(rotation * Math.PI / 180)} r="6" fill="#fca5a5" className="opacity-80" />
+              </g>
+            </svg>
+
+            <button 
+              onClick={toggleRotation}
+              className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition-all ${isRotating ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+            >
+              {isRotating ? 'Остановить вращение' : 'Вращать вектор!'}
+            </button>
           </div>
         </div>
 
         {/* Info Panel */}
-        <div className="w-full md:w-1/2 flex flex-col justify-center h-full min-h-[250px]">
-          {mode === 'cartesian' ? (
-            <div className="bg-slate-800/80 p-6 md:p-8 rounded-2xl border-l-4 border-blue-500 shadow-xl h-full flex flex-col justify-center animate-fade-in">
-              <h3 className="text-blue-400 font-bold text-lg md:text-xl mb-4">Декартова система</h3>
-              <div className="font-mono text-3xl md:text-4xl space-y-3 font-light mb-6">
-                <div className="flex items-center gap-4"><span className="text-slate-500 w-8">X:</span> <span className="text-blue-300 font-medium">{point.x.toFixed(1)}</span></div>
-                <div className="flex items-center gap-4"><span className="text-slate-500 w-8">Y:</span> <span className="text-blue-300 font-medium">{point.y.toFixed(1)}</span></div>
-              </div>
-              <p className="text-sm md:text-base text-slate-300 leading-relaxed">
-                Сетка может расширяться до бесконечности в любую сторону. Модели приходится каждый раз вычислять, <b>насколько велик масштаб</b> текущих чисел, и сохранять этот коэффициент отдельно.
-              </p>
+        <div className="w-full lg:w-1/2 flex flex-col justify-center gap-4">
+          <div className="bg-slate-800/80 p-5 md:p-6 rounded-2xl border-l-4 border-emerald-500 shadow-xl">
+            <h3 className="text-emerald-400 font-bold text-lg mb-3 flex items-center gap-2"><Sparkles size={20} /> Магия математики</h3>
+            <p className="text-sm md:text-base text-slate-300 leading-relaxed">
+              При вращении аномально большое значение (красный вектор) <b>"размазывается" по всем остальным осям</b>. В многомерных пространствах (тысячи измерений) по <a href="https://ru.wikipedia.org/wiki/Закон_больших_чисел" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">закону больших чисел</a> это приводит к тому, что значения на каждой оси сходятся к <b>идеальному нормальному распределению (колоколу)</b>.
+            </p>
+          </div>
+
+          <div className="bg-slate-900/80 p-5 md:p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <h3 className="text-slate-200 font-bold text-lg mb-3">Готовая сетка (K-means)</h3>
+            <p className="text-sm md:text-base text-slate-400 leading-relaxed mb-4">
+              Зная, что после вращения данные всегда принимают форму "колокола", мы можем заранее рассчитать идеальную сетку округления: плотнее в центре (где большинство чисел) и реже по краям. 
+            </p>
+            <div className="h-12 w-full bg-gradient-to-r from-slate-800 via-emerald-900/50 to-slate-800 rounded-lg relative overflow-hidden flex items-center border border-slate-700">
+              <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-emerald-500/80"></div>
+              <div className="absolute inset-y-0 left-1/2 -translate-x-4 w-1 bg-emerald-500/60"></div>
+              <div className="absolute inset-y-0 left-1/2 translate-x-3 w-1 bg-emerald-500/60"></div>
+              <div className="absolute inset-y-0 left-1/2 -translate-x-10 w-1 bg-emerald-500/40"></div>
+              <div className="absolute inset-y-0 left-1/2 translate-x-9 w-1 bg-emerald-500/40"></div>
+              <div className="absolute inset-y-0 left-4 w-1 bg-emerald-500/20"></div>
+              <div className="absolute inset-y-0 right-4 w-1 bg-emerald-500/20"></div>
             </div>
-          ) : (
-            <div className="bg-slate-800/80 p-6 md:p-8 rounded-2xl border-l-4 border-emerald-500 shadow-xl h-full flex flex-col justify-center animate-fade-in">
-              <h3 className="text-emerald-400 font-bold text-lg md:text-xl mb-4">Полярная система</h3>
-              <div className="font-mono text-3xl md:text-4xl space-y-3 font-light mb-6">
-                <div className="flex items-center gap-4"><span className="text-slate-500 w-8">R:</span> <span className="text-emerald-300 font-medium">{r.toFixed(1)}</span></div>
-                <div className="flex items-center gap-4"><span className="text-slate-500 w-8">θ:</span> <span className="text-emerald-300 font-medium">{theta.toFixed(1)}°</span></div>
-              </div>
-              <p className="text-sm md:text-base text-slate-300 leading-relaxed">
-                Информация перетекает в угол θ, который <b>строго заперт в рамках 360°</b>. Масштаб фиксирован самой геометрией круга — дополнительные метаданные больше не нужны!
-              </p>
-            </div>
-          )}
+            <p className="text-xs text-center text-slate-500 mt-2">Округление происходит на лету без хранения метаданных!</p>
+          </div>
         </div>
       </div>
     </div>
@@ -254,28 +239,28 @@ const Step4 = () => {
     <div className="flex flex-col flex-1 animate-fade-in w-full max-w-4xl mx-auto">
       <div className="mb-auto">
         <h2 className="text-xl md:text-3xl font-bold mb-4 md:mb-6 flex items-center gap-3">
-          <Zap className="text-amber-400 shrink-0 w-6 h-6 md:w-8 md:h-8" /> Шаг 2: QJL (Магия одного бита)
+          <Zap className="text-amber-400 shrink-0 w-6 h-6 md:w-8 md:h-8" /> Шаг 2: Компенсация ошибки (QJL)
         </h2>
         <p className="text-slate-300 text-base md:text-lg leading-relaxed mb-6">
-          После грубого сжатия через PolarQuant остаётся крошечная математическая погрешность (ошибка). Алгоритм <b>QJL (Quantized Johnson-Lindenstrauss)</b> берёт этот остаток и сохраняет от него <b>только 1 бит — знак (+ или -)</b>. Математика доказывает, что в многомерных пространствах этот единственный бит превосходно сохраняет суть направления вектора!
+          Для механизма <b>Attention (Внимания)</b> в ИИ критически важно идеально точное скалярное произведение векторов. Сжатие на первом шаге вносит искажения — ИИ может начать галлюцинировать. Чтобы это исправить, вычисляется <b>остаток (разница)</b> между оригиналом и сжатой версией.
         </p>
       </div>
 
       <div className="bg-slate-900 p-5 md:p-8 rounded-2xl border border-slate-700 w-full shadow-2xl my-6">
         <div className="flex justify-between items-center mb-6 md:mb-8 border-b border-slate-800 pb-4 md:pb-6">
-          <h3 className="text-sm md:text-lg font-medium text-slate-200 leading-tight pr-4">Трансформация ошибки: от дробей к знакам</h3>
+          <h3 className="text-sm md:text-lg font-medium text-slate-200 leading-tight pr-4">Вектор-остаток: сохраняем только знак!</h3>
           <button 
             onClick={generateNew} 
             disabled={isAnimating}
             className="text-xs md:text-sm bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-xl transition-all shadow-lg font-medium shrink-0 flex items-center gap-2"
           >
-            Новый вектор
+            Новая ошибка
           </button>
         </div>
 
         {/* High precision row */}
         <div className="mb-6 md:mb-8 relative">
-          <div className="text-xs md:text-sm tracking-widest text-slate-500 uppercase mb-3 md:mb-4 font-bold">Остаточная погрешность (FP16)</div>
+          <div className="text-xs md:text-sm tracking-widest text-slate-500 uppercase mb-3 md:mb-4 font-bold">Остаточная погрешность (дробная)</div>
           <div className="flex gap-2 md:gap-4">
             {vector.map((val, i) => (
               <div key={i} className="flex-1 bg-slate-950 border border-slate-800 rounded-xl py-3 md:py-6 text-center font-mono text-sm md:text-lg shadow-inner relative overflow-hidden group">
@@ -290,16 +275,13 @@ const Step4 = () => {
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-slate-800 border-dashed"></div>
           </div>
-          <div className="relative bg-slate-900 p-2 md:p-3 rounded-full border border-slate-700 text-slate-400 shadow-sm z-10">
-            <ArrowRight className="rotate-90" size={24} />
+          <div className="relative bg-slate-900 px-4 py-2 rounded-full border border-slate-700 text-amber-500 font-bold text-sm shadow-sm z-10 flex items-center gap-2">
+            Случайная матрица <ArrowRight size={18} /> Знак (1 бит)
           </div>
         </div>
 
         {/* 1-bit row */}
         <div>
-          <div className="text-xs md:text-sm tracking-widest text-amber-500/80 uppercase mb-3 md:mb-4 font-bold flex items-center gap-2">
-            <Zap size={16} className="shrink-0" /> 1-битный QJL фильтр
-          </div>
           <div className="flex gap-2 md:gap-4">
             {vector.map((val, i) => (
               <div key={i} className={`flex-1 rounded-xl py-3 md:py-5 text-center font-mono text-lg md:text-3xl font-black transform transition-all duration-500 shadow-lg border-2 ${val > 0 ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)]' : 'bg-rose-500/10 text-rose-400 border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.1)]'}`}>
@@ -310,6 +292,12 @@ const Step4 = () => {
         </div>
       </div>
       
+      <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700 mt-2">
+        <p className="text-sm md:text-base text-slate-300 leading-relaxed">
+          Этот крошечный остаток умножается на случайную матрицу, и от результата сохраняется <b>ТОЛЬКО ЗНАК (1 бит)</b>. Магия случайных проекций заключается в том, что даже сохраняя лишь знаки, мы с высочайшей точностью кодируем взаимные углы и расстояния между векторами (похоже на методы быстрого векторного поиска соседей). Это полностью компенсирует смещение!
+        </p>
+      </div>
+
       <div className="mt-auto"></div>
     </div>
   );
@@ -320,45 +308,57 @@ const Step5 = () => {
     <div className="flex flex-col flex-1 animate-fade-in w-full max-w-5xl mx-auto">
       <div className="mb-6 md:mb-10 text-center md:text-left">
         <h2 className="text-2xl md:text-4xl font-black mb-4 md:mb-6 bg-gradient-to-r from-blue-400 via-emerald-400 to-amber-400 bg-clip-text text-transparent inline-block">
-          Итог: Эффект TurboQuant
+          Итог: Эффект и Рынок
         </h2>
         
-        <p className="text-slate-300 text-base md:text-xl leading-relaxed max-w-4xl">
-          Скрестив геометрическую элегантность <b>PolarQuant</b> и мощную статистику <b>QJL</b>, исследователи Google создали <b>TurboQuant</b>. Алгоритм упаковывает огромные объемы контекста в микроскопические размеры без переобучения моделей.
+        <p className="text-slate-300 text-base md:text-lg leading-relaxed max-w-4xl">
+          Весь пайплайн TurboQuant <b>не требует переобучения (zero-shot)</b>, шикарно параллелится на видеокартах (GPU) и позволяет сжимать гигантские кэши в 4-6 раз без потери точности скалярных произведений!
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 mb-auto">
-        {/* Metric 1 */}
-        <div className="bg-slate-800/40 border border-slate-700 p-6 md:p-8 rounded-3xl flex flex-col items-center text-center group transition-all duration-300 hover:bg-slate-800 hover:-translate-y-2 hover:shadow-[0_20px_40px_rgba(16,185,129,0.1)]">
-          <div className="p-4 bg-emerald-500/10 rounded-2xl mb-4 text-emerald-400 group-hover:scale-110 transition-transform"><HardDrive size={36} /></div>
-          <h4 className="text-slate-400 text-xs md:text-sm font-bold mb-2 uppercase tracking-widest">Память KV-кэша</h4>
-          <div className="text-5xl md:text-6xl font-black text-slate-50 mb-2">~6<span className="text-3xl md:text-4xl text-emerald-400">x</span></div>
-          <span className="text-emerald-400 text-sm md:text-base font-medium bg-emerald-500/10 px-3 py-1 rounded-full">Компактнее</span>
-          <p className="text-xs md:text-sm text-slate-500 mt-4 pt-4 border-t border-slate-700 w-full">Упаковано в 3 бита на число без метаданных</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-slate-800/40 border border-slate-700 p-6 rounded-3xl flex flex-col items-center text-center">
+          <div className="p-3 bg-emerald-500/10 rounded-2xl mb-3 text-emerald-400"><HardDrive size={28} /></div>
+          <h4 className="text-slate-400 text-xs font-bold mb-1 uppercase tracking-widest">KV-кэш</h4>
+          <div className="text-4xl font-black text-slate-50 mb-1">~6<span className="text-2xl text-emerald-400">x</span></div>
+          <span className="text-emerald-400 text-xs font-medium bg-emerald-500/10 px-2 py-0.5 rounded-full">Сжатие</span>
         </div>
 
-        {/* Metric 2 */}
-        <div className="bg-slate-800/40 border border-slate-700 p-6 md:p-8 rounded-3xl flex flex-col items-center text-center group transition-all duration-300 hover:bg-slate-800 hover:-translate-y-2 hover:shadow-[0_20px_40px_rgba(245,158,11,0.1)]">
-          <div className="p-4 bg-amber-500/10 rounded-2xl mb-4 text-amber-400 group-hover:scale-110 transition-transform"><Zap size={36} /></div>
-          <h4 className="text-slate-400 text-xs md:text-sm font-bold mb-2 uppercase tracking-widest">Ускорение</h4>
-          <div className="text-5xl md:text-6xl font-black text-slate-50 mb-2">8<span className="text-3xl md:text-4xl text-amber-400">x</span></div>
-          <span className="text-amber-400 text-sm md:text-base font-medium bg-amber-500/10 px-3 py-1 rounded-full">Быстрее вычисления</span>
-          <p className="text-xs md:text-sm text-slate-500 mt-4 pt-4 border-t border-slate-700 w-full">В тестах на GPU NVIDIA H100</p>
+        <div className="bg-slate-800/40 border border-slate-700 p-6 rounded-3xl flex flex-col items-center text-center">
+          <div className="p-3 bg-amber-500/10 rounded-2xl mb-3 text-amber-400"><Zap size={28} /></div>
+          <h4 className="text-slate-400 text-xs font-bold mb-1 uppercase tracking-widest">Вычисления</h4>
+          <div className="text-4xl font-black text-slate-50 mb-1">8<span className="text-2xl text-amber-400">x</span></div>
+          <span className="text-amber-400 text-xs font-medium bg-amber-500/10 px-2 py-0.5 rounded-full">Ускорение</span>
         </div>
 
-        {/* Metric 3 */}
-        <div className="bg-slate-800/40 border border-slate-700 p-6 md:p-8 rounded-3xl flex flex-col items-center text-center group transition-all duration-300 hover:bg-slate-800 hover:-translate-y-2 hover:shadow-[0_20px_40px_rgba(59,130,246,0.1)]">
-          <div className="p-4 bg-blue-500/10 rounded-2xl mb-4 text-blue-400 group-hover:scale-110 transition-transform"><CheckCircle2 size={36} /></div>
-          <h4 className="text-slate-400 text-xs md:text-sm font-bold mb-2 uppercase tracking-widest">Точность (Recall)</h4>
-          <div className="text-5xl md:text-6xl font-black text-slate-50 mb-2">0<span className="text-3xl md:text-4xl text-blue-400">%</span></div>
-          <span className="text-blue-400 text-sm md:text-base font-medium bg-blue-500/10 px-3 py-1 rounded-full">Потерь качества</span>
-          <p className="text-xs md:text-sm text-slate-500 mt-4 pt-4 border-t border-slate-700 w-full">Zero-shot (без дообучения модели)</p>
+        <div className="bg-slate-800/40 border border-slate-700 p-6 rounded-3xl flex flex-col items-center text-center">
+          <div className="p-3 bg-blue-500/10 rounded-2xl mb-3 text-blue-400"><CheckCircle2 size={28} /></div>
+          <h4 className="text-slate-400 text-xs font-bold mb-1 uppercase tracking-widest">Loss</h4>
+          <div className="text-4xl font-black text-slate-50 mb-1">0<span className="text-2xl text-blue-400">%</span></div>
+          <span className="text-blue-400 text-xs font-medium bg-blue-500/10 px-2 py-0.5 rounded-full">Потерь</span>
+        </div>
+        
+        <div className="bg-rose-900/20 border border-rose-800/50 p-6 rounded-3xl flex flex-col items-center text-center relative overflow-hidden group">
+          <div className="p-3 bg-rose-500/10 rounded-2xl mb-3 text-rose-400"><TrendingDown size={28} /></div>
+          <h4 className="text-slate-400 text-xs font-bold mb-1 uppercase tracking-widest">Акции Памяти</h4>
+          <div className="text-4xl font-black text-rose-400 mb-1">-5<span className="text-2xl text-rose-500">%</span></div>
+          <span className="text-rose-400 text-xs font-medium bg-rose-500/10 px-2 py-0.5 rounded-full">Падение</span>
+          
+          <div className="absolute inset-0 bg-slate-900/95 flex items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+            <p className="text-xs text-slate-300">Инвесторы запаниковали, думая, что ИИ больше не нужна память. Но алгоритму уже год, а память всё равно в дефиците!</p>
+          </div>
         </div>
       </div>
       
-      <div className="mt-8 text-center text-slate-400 text-sm md:text-base pb-4">
-        Этот прорыв открывает дорогу к нейросетям, способным держать в голове миллионы страниц текста одновременно, и кардинально ускоряет векторный поиск по гигантским базам данных.
+      <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700 shadow-lg mt-auto relative overflow-hidden">
+        <Lightbulb className="absolute -right-4 -top-4 text-slate-800 w-32 h-32 opacity-50" />
+        <h3 className="text-xl font-bold text-slate-200 mb-3 relative z-10 flex items-center gap-2">
+          Драма на фондовом рынке 📉
+        </h3>
+        <p className="text-slate-400 text-sm md:text-base leading-relaxed relative z-10">
+          Когда Google Research опубликовали этот пост в блоге и Twitter, акции производителей памяти (Samsung, Micron, SK Hynix) <b>мгновенно рухнули на 4-5%</b>. Инвесторы решили: "Всё, ИИ научился сжимать данные в 6 раз, память больше не нужна, продажи SSD и DRAM упадут!" <br/><br/>
+          Ирония в том, что сама научная статья (пейпер) вышла еще в апреле 2025 года, и аналоги (например, DeepSeek MLA) существуют давно. Крупные игроки просто играют на ожиданиях толпы: продают на "страшной" новости, чтобы потом закупиться подешевле. Спрос на память для ИИ никуда не денется!
+        </p>
       </div>
     </div>
   );
@@ -368,11 +368,11 @@ export default function App() {
   const [step, setStep] = useState(0);
 
   const steps = [
-    { title: "Проблема KV-Кэша", component: Step1 },
-    { title: "Накладные расходы", component: Step2 },
-    { title: "PolarQuant", component: Step3 },
-    { title: "QJL", component: Step4 },
-    { title: "Результаты", component: Step5 }
+    { title: "KV-Кэш", component: Step1 },
+    { title: "Проблема масштаба", component: Step2 },
+    { title: "Случайное вращение", component: Step3 },
+    { title: "QJL и Знаки", component: Step4 },
+    { title: "Итог и Рынок", component: Step5 }
   ];
 
   const CurrentComponent = steps[step].component;
@@ -388,7 +388,6 @@ export default function App() {
           animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
         
-        /* Custom scrollbar for webkit */
         ::-webkit-scrollbar {
           width: 8px;
           height: 8px;
@@ -405,13 +404,11 @@ export default function App() {
         }
       `}</style>
       
-      {/* Root Container: Stretches fully via absolute inset-0 */}
       <div className="absolute inset-0 flex flex-col bg-[#0f172a] text-slate-50 font-sans overflow-hidden">
         
-        {/* Header: Fixed height, always stable */}
         <header className="shrink-0 flex items-center justify-between px-4 md:px-8 py-4 border-b border-slate-800 bg-slate-900 z-20 shadow-sm">
           <h1 className="text-lg md:text-2xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent truncate pr-4">
-            Алгоритм TurboQuant
+            Алгоритм TurboQuant (Deep Dive)
           </h1>
           <a 
             href="https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/" 
@@ -425,14 +422,12 @@ export default function App() {
           </a>
         </header>
 
-        {/* Main Content Area: Flexible, scrollable, independent of header/footer */}
         <main className="flex-1 overflow-y-auto relative bg-gradient-to-b from-slate-900 to-slate-950">
           <div className="min-h-full flex flex-col p-4 md:p-8 lg:p-12 w-full max-w-7xl mx-auto">
             <CurrentComponent key={step} />
           </div>
         </main>
 
-        {/* Footer: Fixed height, stable controls */}
         <footer className="shrink-0 flex justify-between items-center px-4 md:px-8 py-5 md:py-6 border-t border-slate-800 bg-slate-900 z-20 min-h-[80px] md:min-h-[100px] shadow-[0_-10px_30px_rgba(0,0,0,0.2)]">
           
           <button 
@@ -453,7 +448,6 @@ export default function App() {
                     ${i === step ? 'w-10 md:w-16 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : i < step ? 'w-4 md:w-6 bg-emerald-500/50 hover:bg-emerald-500' : 'w-4 md:w-6 bg-slate-700 hover:bg-slate-600'}`}
                   aria-label={s.title}
                 >
-                  {/* Tooltip on hover for dots */}
                   <span className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-slate-800 text-slate-200 text-xs px-3 py-1.5 rounded border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl z-30">
                     {s.title}
                   </span>
