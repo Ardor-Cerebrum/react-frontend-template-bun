@@ -33,14 +33,11 @@ const FilmCanisterSVG = () => (
       </linearGradient>
     </defs>
 
-    {/* Film Spool (Top protrusion) */}
     <path d="M 40 -8 L 60 -8 L 62 0 L 38 0 Z" fill="url(#metal-dark)" />
     <rect x="38" y="0" width="24" height="2" fill="#000" />
 
-    {/* Main Cylinder Body */}
     <rect x="10" y="12" width="86" height="116" fill="url(#yellow-body)" />
     
-    {/* Barcode / Film DX area styling */}
     <g transform="translate(68, 25)">
       <rect x="0" y="0" width="28" height="90" fill="#111" />
       <rect x="0" y="5" width="28" height="6" fill="#ddd" />
@@ -51,27 +48,23 @@ const FilmCanisterSVG = () => (
       <rect x="0" y="80" width="28" height="5" fill="#ddd" />
     </g>
 
-    {/* Branding & Text */}
     <text x="-115" y="42" transform="rotate(-90)" fontFamily="monospace" fontWeight="900" fontSize="24" fill="#000" letterSpacing="1">SNG-ALG</text>
     <text x="-115" y="55" transform="rotate(-90)" fontFamily="sans-serif" fontWeight="bold" fontSize="10" fill="#222">400 / 36 EXP</text>
     <circle cx="28" cy="80" r="4" fill="#000" />
     <text x="36" y="83" fontFamily="sans-serif" fontWeight="900" fontSize="9" fill="#000">C-41</text>
 
-    {/* Top Metal Cap */}
     <rect x="6" y="0" width="94" height="12" rx="2" fill="url(#metal)" />
     <rect x="6" y="12" width="94" height="2" fill="rgba(0,0,0,0.5)" />
     {[...Array(20)].map((_, i) => (
       <line key={`tr-${i}`} x1={8 + i * 4.6} y1="1" x2={8 + i * 4.6} y2="11" stroke="rgba(0,0,0,0.3)" strokeWidth="1" />
     ))}
 
-    {/* Bottom Metal Cap */}
     <rect x="6" y="128" width="94" height="12" rx="2" fill="url(#metal)" />
     <rect x="6" y="126" width="94" height="2" fill="rgba(0,0,0,0.4)" />
     {[...Array(20)].map((_, i) => (
       <line key={`br-${i}`} x1={8 + i * 4.6} y1="129" x2={8 + i * 4.6} y2="139" stroke="rgba(0,0,0,0.3)" strokeWidth="1" />
     ))}
 
-    {/* Film Slit Mechanism (Left side) */}
     <g transform="translate(0, 0)">
       <path d="M 12 20 L 0 24 L 0 116 L 12 120 Z" fill="url(#slit-grad)" />
       <rect x="-2" y="24" width="4" height="92" fill="#000" rx="1" />
@@ -88,7 +81,7 @@ export default function App() {
   const [timer, setTimer] = useState(432);
 
   useEffect(() => {
-    const handleMouseMove = (e) => {
+    const handleMouseMove = (e: MouseEvent) => {
       setMousePos({ x: e.clientX, y: e.clientY });
     };
     window.addEventListener('mousemove', handleMouseMove);
@@ -102,7 +95,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const formatTime = (seconds) => {
+  const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
     const s = (seconds % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
@@ -193,13 +186,13 @@ export default function App() {
                   src="https://images.unsplash.com/photo-1617396900799-f4c28d72cdbe?auto=format&fit=crop&q=80&w=1200" 
                   alt="Undeveloped"
                   className="w-full h-full object-cover contrast-50 grayscale brightness-[1.3] sepia-[.2]" 
-                  onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1518182170546-076616fdcdfa?auto=format&fit=crop&q=80&w=1200"; }}
+                  onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { e.currentTarget.src = "https://images.unsplash.com/photo-1518182170546-076616fdcdfa?auto=format&fit=crop&q=80&w=1200"; }}
                 />
                 <img 
                   src="https://images.unsplash.com/photo-1617396900799-f4c28d72cdbe?auto=format&fit=crop&q=80&w=1200" 
                   alt="Developed"
                   className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-[4000ms] ease-in-out" 
-                  onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1518182170546-076616fdcdfa?auto=format&fit=crop&q=80&w=1200"; }}
+                  onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { e.currentTarget.src = "https://images.unsplash.com/photo-1518182170546-076616fdcdfa?auto=format&fit=crop&q=80&w=1200"; }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#2a1b1b]/30 to-transparent -translate-y-full group-hover:translate-y-[200%] transition-transform duration-[4000ms] ease-linear pointer-events-none mix-blend-multiply" />
               </div>
