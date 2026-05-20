@@ -56,7 +56,7 @@ export default function App() {
 
   const fetchVideos = async () => {
     try {
-      const res = await fetch(\`\${API_URL}/videos\`);
+      const res = await fetch(`${API_URL}/videos`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setVideos(data.filter((v: Video) => v.status === 'completed'));
@@ -82,7 +82,7 @@ export default function App() {
     formData.append('file', file);
 
     try {
-      const res = await fetch(\`\${API_URL}/upload\`, {
+      const res = await fetch(`${API_URL}/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -212,9 +212,9 @@ export default function App() {
               <button 
                 type="submit"
                 disabled={isUploading}
-                className={\`w-full py-5 text-[12px] tracking-[0.3em] uppercase font-bold transition-all flex items-center justify-center gap-3 \${
+                className={`w-full py-5 text-[12px] tracking-[0.3em] uppercase font-bold transition-all flex items-center justify-center gap-3 ${
                   isUploading ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed' : 'bg-black text-white hover:bg-zinc-800'
-                }\`}
+                }`}
               >
                 {isUploading ? (
                   <>
