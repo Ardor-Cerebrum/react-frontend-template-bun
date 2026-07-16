@@ -1,256 +1,210 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Upload, Play, Film, ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { FilesetResolver, PoseLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
+import { Camera, Check, Eye, Focus, Gauge, LockKeyhole, Pause, Play, RotateCcw, ScanFace, Sparkles } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+type PostureState = 'idle' | 'calibrating' | 'aligned' | 'slouching' | 'searching';
+type Snapshot = { id: number; time: string; score: number; state: PostureState; energy: number; focus: number; strain: number };
+type CheckIn = { energy: number; focus: number; strain: number };
 
-interface Video {
-  id: string;
-  title: string;
-  status: string;
-  processed_url: string;
-  created_at: string;
+const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
+const INTERVAL_MS = 15 * 60 * 1000;
+const CONNECTIONS: [number, number][] = [[0,11],[0,12],[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24]];
+
+const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, value));
+const midpoint = (a: NormalizedLandmark, b: NormalizedLandmark) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+function scorePose(points: NormalizedLandmark[], baseline: number | null) {
+  const shoulders = midpoint(points[11], points[12]);
+  const ears = midpoint(points[7], points[8]);
+  const shoulderWidth = Math.max(Math.abs(points[11].x - points[12].x), .04);
+  const neckLength = (shoulders.y - ears.y) / shoulderWidth;
+  const tilt = Math.abs(points[11].y - points[12].y) / shoulderWidth;
+  if (!baseline) return { score: 88, neckLength, tilt };
+  const collapse = Math.max(0, (baseline - neckLength) / Math.max(baseline, .08));
+  return { score: Math.round(clamp(100 - collapse * 145 - tilt * 24)), neckLength, tilt };
 }
 
-const VideoCard = ({ video }: { video: Video }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
+function drawPose(canvas: HTMLCanvasElement, points: NormalizedLandmark[], state: PostureState) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const color = state === 'slouching' ? '#ff7657' : '#b9f25f';
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = color; ctx.lineWidth = 5; ctx.shadowColor = color; ctx.shadowBlur = 14;
+  CONNECTIONS.forEach(([a, b]) => {
+    if ((points[a].visibility ?? 1) < .45 || (points[b].visibility ?? 1) < .45) return;
+    ctx.beginPath(); ctx.moveTo(points[a].x * canvas.width, points[a].y * canvas.height);
+    ctx.lineTo(points[b].x * canvas.width, points[b].y * canvas.height); ctx.stroke();
+  });
+  ctx.fillStyle = '#f8f5ea'; ctx.shadowBlur = 9;
+  [0, 7, 8, 11, 12, 23, 24].forEach((i) => {
+    ctx.beginPath(); ctx.arc(points[i].x * canvas.width, points[i].y * canvas.height, 6, 0, Math.PI * 2); ctx.fill();
+  });
+}
 
-  const handleMouseEnter = () => {
-    videoRef.current?.play().catch(() => {});
-  };
-
-  const handleMouseLeave = () => {
-    videoRef.current?.pause();
-    if (videoRef.current) videoRef.current.currentTime = 0;
-  };
-
-  return (
-    <div 
-      className="masonry-item group relative bg-black overflow-hidden cursor-pointer"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      <div className="aspect-[3/4] overflow-hidden">
-        <video
-          ref={videoRef}
-          src={video.processed_url}
-          muted
-          loop
-          playsInline
-          className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-700 grayscale hover:grayscale-0"
-        />
-      </div>
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 flex flex-col justify-end p-6">
-        <p className="text-[10px] font-sans tracking-[0.3em] uppercase mb-1 opacity-60">Featured Work</p>
-        <h3 className="text-white text-xl font-serif uppercase leading-none">{video.title}</h3>
-      </div>
-    </div>
-  );
-};
+const Metric = ({ icon, label, value, suffix = '%' }: { icon: React.ReactNode; label: string; value: number; suffix?: string }) => (
+  <div className="metric">
+    <div className="metric-top"><span>{icon}{label}</span><strong>{value}{suffix}</strong></div>
+    <div className="meter"><i style={{ width: `${value}%` }} /></div>
+  </div>
+);
 
 export default function App() {
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [title, setTitle] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const landmarkerRef = useRef<PoseLandmarker | null>(null);
+  const frameRef = useRef(0);
+  const lastVideoTimeRef = useRef(-1);
+  const lastInferenceRef = useRef(0);
+  const baselineRef = useRef<number | null>(null);
+  const latestRef = useRef({ score: 0, state: 'searching' as PostureState });
+  const checkInRef = useRef<CheckIn>({ energy: 72, focus: 78, strain: 28 });
+  const [active, setActive] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [state, setState] = useState<PostureState>('idle');
+  const [score, setScore] = useState(0);
+  const [baseline, setBaseline] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [nextSnapshot, setNextSnapshot] = useState(INTERVAL_MS);
+  const [checkIn, setCheckIn] = useState<CheckIn>(checkInRef.current);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>(() => {
+    try { return JSON.parse(localStorage.getItem('upright-snapshots') || '[]'); } catch { return []; }
+  });
 
-  const fetchVideos = async () => {
-    try {
-      const res = await fetch(`${API_URL}/videos`);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setVideos(data.filter((v: Video) => v.status === 'completed'));
-      }
-    } catch (err) {
-      console.error('Failed to fetch videos', err);
-    }
-  };
+  useEffect(() => { checkInRef.current = checkIn; }, [checkIn]);
+  useEffect(() => { localStorage.setItem('upright-snapshots', JSON.stringify(snapshots.slice(0, 12))); }, [snapshots]);
+
+  const takeSnapshot = useCallback(() => {
+    if (!active || latestRef.current.score === 0) return;
+    const now = new Date();
+    setSnapshots((items) => [{ id: now.getTime(), time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), score: latestRef.current.score, state: latestRef.current.state, ...checkInRef.current }, ...items].slice(0, 12));
+    setNextSnapshot(INTERVAL_MS);
+  }, [active]);
 
   useEffect(() => {
-    fetchVideos();
-    const interval = setInterval(fetchVideos, 10000);
-    return () => clearInterval(interval);
+    if (!active) return;
+    const timer = window.setInterval(() => setNextSnapshot((left) => {
+      if (left <= 1000) { window.setTimeout(takeSnapshot, 0); return INTERVAL_MS; }
+      return left - 1000;
+    }), 1000);
+    return () => clearInterval(timer);
+  }, [active, takeSnapshot]);
+
+  const renderLoop = useCallback(() => {
+    const video = videoRef.current; const canvas = canvasRef.current; const model = landmarkerRef.current;
+    if (!video || !canvas || !model || video.readyState < 2) { frameRef.current = requestAnimationFrame(renderLoop); return; }
+    if (canvas.width !== video.videoWidth) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
+    if (video.currentTime === lastVideoTimeRef.current || performance.now() - lastInferenceRef.current < 120) {
+      frameRef.current = requestAnimationFrame(renderLoop); return;
+    }
+    lastVideoTimeRef.current = video.currentTime; lastInferenceRef.current = performance.now();
+    try {
+      const result = model.detectForVideo(video, performance.now());
+      const points = result.landmarks[0];
+      if (points) {
+        const reading = scorePose(points, baselineRef.current);
+        const posture: PostureState = baselineRef.current ? (reading.score < 72 ? 'slouching' : 'aligned') : 'calibrating';
+        setScore(reading.score); setState(posture); latestRef.current = { score: reading.score, state: posture };
+        drawPose(canvas, points, posture);
+      } else {
+        canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height); setState('searching');
+      }
+    } catch { /* transient frame errors are safe to skip */ }
+    frameRef.current = requestAnimationFrame(renderLoop);
   }, []);
 
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file || !title) return;
-
-    setIsUploading(true);
-    const formData = new FormData();
-    formData.append('title', title);
-    formData.append('file', file);
-
+  const start = async () => {
+    setLoading(true); setError('');
     try {
-      const res = await fetch(`${API_URL}/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (res.ok) {
-        setIsModalOpen(false);
-        setTitle('');
-        setFile(null);
-        fetchVideos();
+      if (!landmarkerRef.current) {
+        const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+        try {
+          landmarkerRef.current = await PoseLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' }, runningMode: 'VIDEO', numPoses: 1, minPoseDetectionConfidence: .55, minTrackingConfidence: .55 });
+        } catch {
+          landmarkerRef.current = await PoseLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: MODEL_URL, delegate: 'CPU' }, runningMode: 'VIDEO', numPoses: 1, minPoseDetectionConfidence: .55, minTrackingConfidence: .55 });
+        }
       }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+      setActive(true); setState('calibrating'); frameRef.current = requestAnimationFrame(renderLoop);
     } catch (err) {
-      console.error('Upload failed', err);
-    } finally {
-      setIsUploading(false);
-    }
+      setError(err instanceof Error ? err.message : 'Camera access was unavailable.'); setState('idle');
+    } finally { setLoading(false); }
   };
 
+  const stop = () => {
+    cancelAnimationFrame(frameRef.current); streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null; setActive(false); setState('idle'); setScore(0);
+    canvasRef.current?.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+  };
+
+  const calibrate = () => {
+    const video = videoRef.current; const model = landmarkerRef.current;
+    if (!video || !model) return;
+    const points = model.detectForVideo(video, Math.max(performance.now(), lastInferenceRef.current + 1)).landmarks[0];
+    if (!points) { setError('Sit fully in frame so I can see your head and shoulders.'); return; }
+    const reference = scorePose(points, null).neckLength; baselineRef.current = reference; setBaseline(reference); setState('aligned'); setError('');
+  };
+
+  const message = state === 'slouching' ? 'Lift through the crown' : state === 'aligned' ? 'You’re stacked nicely' : state === 'searching' ? 'Come into frame' : state === 'calibrating' ? 'Sit tall, then set your baseline' : 'Your quiet posture companion';
+  const detail = state === 'slouching' ? 'Ease your shoulders back and float your ears above them.' : state === 'aligned' ? 'Breathe, soften your jaw, and keep this easy shape.' : 'Your camera stays on this device. No photos are uploaded.';
+  const average = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.score, 0) / snapshots.length) : score;
+  const mins = Math.floor(nextSnapshot / 60000); const secs = Math.floor((nextSnapshot % 60000) / 1000);
+
   return (
-    <div className="min-h-screen bg-white text-black selection:bg-black selection:text-white">
-      {/* Header */}
-      <header className="fixed top-0 left-0 w-full z-40 bg-white/80 backdrop-blur-sm border-b border-black/5 px-6 py-4 flex justify-between items-end">
-        <div className="flex flex-col">
-          <h1 className="text-3xl font-serif font-black tracking-tight leading-none">LUMINA</h1>
-          <p className="text-[10px] font-sans tracking-[0.5em] uppercase opacity-50">Visual Portfolio</p>
-        </div>
-        
-        <div className="flex items-center gap-8">
-          <nav className="hidden md:flex gap-6 text-[11px] font-sans tracking-[0.2em] uppercase font-medium">
-            <a href="#" className="hover:opacity-50 transition-opacity">Archive</a>
-            <a href="#" className="hover:opacity-50 transition-opacity">About</a>
-            <a href="#" className="hover:opacity-50 transition-opacity">Contact</a>
-          </nav>
-          
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 bg-black text-white px-5 py-2 text-[10px] tracking-[0.2em] uppercase hover:bg-zinc-800 transition-colors"
-          >
-            <Plus size={14} />
-            <span>Submit Work</span>
-          </button>
-        </div>
+    <main className={`app posture-${state}`}>
+      <header>
+        <div className="wordmark"><span className="mark"><i /><i /><i /></span><div><b>UPRIGHT</b><small>POSTURE, FELT</small></div></div>
+        <div className="privacy"><LockKeyhole size={14} /> PRIVATE BY DESIGN · ON-DEVICE AI</div>
       </header>
 
-      <main className="pt-32 pb-24 px-6 max-w-[1600px] mx-auto">
-        {/* Hero Section */}
-        <section className="mb-24 flex flex-col items-start max-w-2xl">
-          <h2 className="text-6xl md:text-8xl font-serif leading-[0.9] mb-8">
-            Directing <br /> <span className="italic">Emotion</span> Through Motion.
-          </h2>
-          <p className="text-lg leading-relaxed opacity-70 mb-8 font-sans">
-            A curated showcase of cinematic excellence. Minimalist by design, powerful by execution. Exploration of light, shadow, and human narrative.
-          </p>
-          <div className="flex items-center gap-4 text-[11px] font-sans tracking-[0.2em] uppercase">
-            <div className="w-12 h-[1px] bg-black"></div>
-            <span>Latest Collections</span>
+      <section className="stage">
+        <div className="camera-shell">
+          <video ref={videoRef} muted playsInline />
+          <canvas ref={canvasRef} />
+          {!active && <div className="camera-empty"><div className="orb"><ScanFace size={48} /></div><p>Your posture appears here</p><span>Center your head and shoulders in frame</span></div>}
+          <div className="scanline" />
+          <div className="camera-label"><span className={active ? 'live' : ''} />{active ? 'ANALYZING LIVE' : 'CAMERA RESTING'}</div>
+          {active && <div className="score-ring"><strong>{score || '—'}</strong><small>POSTURE</small></div>}
+        </div>
+
+        <div className="coach">
+          <p className="eyebrow"><Sparkles size={14} /> LIVE COACH</p>
+          <h1>{message}</h1>
+          <p className="coach-copy">{detail}</p>
+          <div className={`status status-${state}`}><span>{state === 'aligned' ? <Check size={17} /> : <Gauge size={17} />}</span><div><b>{state === 'slouching' ? 'Slouch detected' : state === 'aligned' ? 'Aligned posture' : 'Ready when you are'}</b><small>{baseline ? 'Compared with your personal tall baseline' : 'Calibrate once from a comfortable tall seat'}</small></div></div>
+          <div className="actions">
+            {!active ? <button className="primary" onClick={start} disabled={loading}><Camera size={19} />{loading ? 'WAKING THE COACH…' : 'START CAMERA'}</button> : <button className="primary" onClick={calibrate}><RotateCcw size={18} />SET TALL BASELINE</button>}
+            {active && <button className="icon-button" onClick={stop} title="Pause camera"><Pause size={19} /></button>}
           </div>
-        </section>
-
-        {/* Grid */}
-        <div className="masonry-grid">
-          {videos.map((video) => (
-            <VideoCard key={video.id} video={video} />
-          ))}
+          {error && <p className="error">{error}</p>}
+          <p className="medical-note">A wellbeing cue, not a medical diagnosis. Pain or persistent symptoms deserve a qualified clinician.</p>
         </div>
-      </main>
+      </section>
 
-      {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-md"
-            onClick={() => !isUploading && setIsModalOpen(false)}
-          ></div>
-          
-          <div className="relative bg-white w-full max-w-xl p-12 shadow-2xl">
-            <button 
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-6 right-6 hover:rotate-90 transition-transform duration-300"
-              disabled={isUploading}
-            >
-              <X size={24} />
-            </button>
-            
-            <div className="mb-10 text-black">
-              <h3 className="text-3xl font-serif mb-2 uppercase">Upload Vision</h3>
-              <p className="text-[11px] font-sans tracking-[0.2em] uppercase opacity-40">Add your work to the archive</p>
-            </div>
+      <section className="lower">
+        <div className="checkin card">
+          <div className="section-title"><div><p className="eyebrow">HOW ARE YOU, REALLY?</p><h2>Quick check-in</h2></div><span>Slide what feels true</span></div>
+          <Metric icon={<Gauge size={15} />} label="ENERGY" value={checkIn.energy} />
+          <input aria-label="Energy" type="range" min="0" max="100" value={checkIn.energy} onChange={(e) => setCheckIn({ ...checkIn, energy: +e.target.value })} />
+          <Metric icon={<Focus size={15} />} label="FOCUS" value={checkIn.focus} />
+          <input aria-label="Focus" type="range" min="0" max="100" value={checkIn.focus} onChange={(e) => setCheckIn({ ...checkIn, focus: +e.target.value })} />
+          <Metric icon={<Eye size={15} />} label="EYE STRAIN" value={checkIn.strain} />
+          <input aria-label="Eye strain" type="range" min="0" max="100" value={checkIn.strain} onChange={(e) => setCheckIn({ ...checkIn, strain: +e.target.value })} />
+        </div>
 
-            <form onSubmit={handleUpload} className="space-y-8 text-black">
-              <div>
-                <label className="block text-[10px] tracking-[0.2em] uppercase font-bold mb-3">Project Title</label>
-                <input 
-                  type="text" 
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  required
-                  className="w-full border-b border-black/20 focus:border-black outline-none py-2 text-xl font-serif transition-colors bg-transparent"
-                  placeholder="Enter title..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] tracking-[0.2em] uppercase font-bold mb-3">Video File</label>
-                <div className="relative h-48 border-2 border-dashed border-black/10 flex flex-col items-center justify-center group hover:border-black/30 transition-colors cursor-pointer overflow-hidden">
-                  <input 
-                    type="file" 
-                    accept="video/*"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    required
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                  />
-                  {file ? (
-                    <div className="flex flex-col items-center p-4">
-                      <Film size={32} className="mb-2" />
-                      <p className="text-sm font-medium">{file.name}</p>
-                      <p className="text-[10px] opacity-40 mt-1 uppercase">Ready for export</p>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload size={32} className="mb-2 opacity-20 group-hover:scale-110 transition-transform" />
-                      <p className="text-[11px] tracking-[0.1em] opacity-40 uppercase">Drag or Click to choose file</p>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <button 
-                type="submit"
-                disabled={isUploading}
-                className={`w-full py-5 text-[12px] tracking-[0.3em] uppercase font-bold transition-all flex items-center justify-center gap-3 ${
-                  isUploading ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed' : 'bg-black text-white hover:bg-zinc-800'
-                }`}
-              >
-                {isUploading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin"></div>
-                    <span>Processing...</span>
-                  </>
-                ) : (
-                  <>
-                    <ChevronRight size={16} />
-                    <span>Initialize Upload</span>
-                  </>
-                )}
-              </button>
-            </form>
+        <div className="rhythm card">
+          <div className="section-title"><div><p className="eyebrow">YOUR WORK RHYTHM</p><h2>Posture moments</h2></div><button className="text-button" onClick={takeSnapshot} disabled={!active}>CAPTURE NOW</button></div>
+          <div className="next"><div className="pulse"><Play size={16} /></div><div><small>NEXT PRIVATE CHECK</small><strong>{String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}</strong></div><p>Every 15 min<br/><span>landmarks only</span></p></div>
+          <div className="timeline">
+            {snapshots.length === 0 ? <div className="empty-timeline"><i /><p>Your posture pattern will gently gather here.</p></div> : snapshots.slice(0, 5).map((item) => <div className="moment" key={item.id}><span className={item.score < 72 ? 'low' : ''}>{item.score}</span><div><b>{item.time}</b><small>{item.state === 'slouching' ? 'Rounded moment' : 'Open posture'} · energy {item.energy}% · focus {item.focus}%</small></div></div>)}
           </div>
+          <div className="summary"><span>Today’s shape</span><b>{snapshots.length ? `${average}% aligned on average` : 'Waiting for your first moment'}</b></div>
         </div>
-      )}
-
-      {/* Footer */}
-      <footer className="px-6 py-12 border-t border-black/5 flex flex-col md:flex-row justify-between items-center gap-8">
-        <div className="flex flex-col items-center md:items-start">
-          <p className="text-[11px] font-sans tracking-[0.3em] uppercase font-bold">Lumina Portfolio</p>
-          <p className="text-[10px] opacity-40 uppercase mt-1">© 2024 All rights reserved</p>
-        </div>
-        
-        <div className="flex gap-8 text-[10px] tracking-[0.2em] uppercase font-medium">
-          <a href="#" className="hover:underline">Instagram</a>
-          <a href="#" className="hover:underline">Vimeo</a>
-          <a href="#" className="hover:underline">LinkedIn</a>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-[9px] tracking-[0.1em] uppercase opacity-60">System Online</span>
-        </div>
-      </footer>
-    </div>
+      </section>
+    </main>
   );
 }
