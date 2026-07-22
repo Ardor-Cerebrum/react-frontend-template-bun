@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FilesetResolver, PoseLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { Camera, Check, Eye, Focus, Gauge, LockKeyhole, Pause, Play, RotateCcw, ScanFace, Sparkles } from 'lucide-react';
+import { supabase, isConfigured } from './supabase';
 
 type PostureState = 'idle' | 'calibrating' | 'aligned' | 'slouching' | 'searching';
 type Snapshot = { id: number; time: string; score: number; state: PostureState; energy: number; focus: number; strain: number };
@@ -74,13 +75,77 @@ export default function App() {
   });
 
   useEffect(() => { checkInRef.current = checkIn; }, [checkIn]);
-  useEffect(() => { localStorage.setItem('upright-snapshots', JSON.stringify(snapshots.slice(0, 12))); }, [snapshots]);
 
-  const takeSnapshot = useCallback(() => {
+  useEffect(() => {
+    if (!isConfigured) {
+      localStorage.setItem('upright-snapshots', JSON.stringify(snapshots.slice(0, 12)));
+    }
+  }, [snapshots]);
+
+  useEffect(() => {
+    if (!isConfigured) return;
+    const loadFromSupabase = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('posture_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(12);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          const loaded: Snapshot[] = data.map((row: any) => {
+            const d = new Date(row.created_at);
+            return {
+              id: row.id,
+              time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              score: row.score,
+              state: row.state as PostureState,
+              energy: row.energy,
+              focus: row.focus,
+              strain: row.eye_strain,
+            };
+          });
+          setSnapshots(loaded);
+        }
+      } catch (err) {
+        console.error('Failed to load from Supabase:', err);
+      }
+    };
+    loadFromSupabase();
+  }, []);
+
+  const takeSnapshot = useCallback(async () => {
     if (!active || latestRef.current.score === 0) return;
     const now = new Date();
-    setSnapshots((items) => [{ id: now.getTime(), time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), score: latestRef.current.score, state: latestRef.current.state, ...checkInRef.current }, ...items].slice(0, 12));
+    const currentScore = latestRef.current.score;
+    const currentState = latestRef.current.state;
+    const currentCheckIn = checkInRef.current;
+
+    const localId = now.getTime();
+    const localTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    setSnapshots((items) => [
+      { id: localId, time: localTime, score: currentScore, state: currentState, ...currentCheckIn },
+      ...items
+    ].slice(0, 12));
     setNextSnapshot(INTERVAL_MS);
+
+    if (isConfigured) {
+      try {
+        const { error } = await supabase.from('posture_logs').insert([
+          {
+            score: currentScore,
+            state: currentState,
+            energy: currentCheckIn.energy,
+            focus: currentCheckIn.focus,
+            eye_strain: currentCheckIn.strain,
+          }
+        ]);
+        if (error) throw error;
+      } catch (err) {
+        console.error('Failed to save log to Supabase:', err);
+      }
+    }
   }, [active]);
 
   useEffect(() => {
@@ -158,7 +223,13 @@ export default function App() {
     <main className={`app posture-${state}`}>
       <header>
         <div className="wordmark"><span className="mark"><i /><i /><i /></span><div><b>UPRIGHT</b><small>POSTURE, FELT</small></div></div>
-        <div className="privacy"><LockKeyhole size={14} /> PRIVATE BY DESIGN · ON-DEVICE AI</div>
+        <div className="privacy-row">
+          <div className="privacy"><LockKeyhole size={14} /> PRIVATE BY DESIGN · ON-DEVICE AI</div>
+          <div className={`sync-status ${isConfigured ? 'synced' : 'local'}`}>
+            <span className="dot" />
+            {isConfigured ? 'CONNECTED TO SUPABASE' : 'LOCAL-ONLY STORAGE'}
+          </div>
+        </div>
       </header>
 
       <section className="stage">
