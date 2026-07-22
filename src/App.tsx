@@ -260,6 +260,7 @@ export default function App() {
   const message = state === 'slouching' ? 'Lift through the crown' : state === 'aligned' ? 'You’re stacked nicely' : state === 'searching' ? 'Come into frame' : state === 'calibrating' ? 'Sit tall, then set your baseline' : 'Your quiet posture companion';
   const detail = state === 'slouching' ? 'Ease your shoulders back and float your ears above them.' : state === 'aligned' ? 'Breathe, soften your jaw, and keep this easy shape.' : 'Your camera stays on this device. No photos are uploaded.';
   const average = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.score, 0) / snapshots.length) : score;
+  const insights = getPostureInsights(snapshots);
   const mins = Math.floor(nextSnapshot / 60000); const secs = Math.floor((nextSnapshot % 60000) / 1000);
 
   return (
