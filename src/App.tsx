@@ -281,6 +281,11 @@ export default function App() {
           <video ref={videoRef} muted playsInline />
           <canvas ref={canvasRef} />
           {!active && <div className="camera-empty"><div className="orb"><ScanFace size={48} /></div><p>Your posture appears here</p><span>Center your head and shoulders in frame</span></div>}
+          {active && (
+            <div className={`posture-badge ${state}`}>
+              {state === 'aligned' ? 'GOOD' : state === 'slouching' ? 'BAD' : state === 'searching' ? 'SEARCHING' : 'CALIBRATING'}
+            </div>
+          )}
           <div className="scanline" />
           <div className="camera-label"><span className={active ? 'live' : ''} />{active ? 'ANALYZING LIVE' : 'CAMERA RESTING'}</div>
           {active && <div className="score-ring"><strong>{score || '—'}</strong><small>POSTURE</small></div>}

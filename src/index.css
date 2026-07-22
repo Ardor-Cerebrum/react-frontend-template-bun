@@ -32,3 +32,32 @@ header { height: 94px; display: flex; align-items: center; justify-content: spac
 .insights-box { background: rgba(185, 242, 95, 0.03); border: 1px solid rgba(185, 242, 95, 0.12); border-radius: 8px; padding: 18px 22px; margin-top: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
 .insights-box h3 { color: #b9f25f; font-family: 'Newsreader', serif; font-size: 15px; margin: 0 0 6px; font-weight: 500; display: flex; align-items: center; gap: 8px; letter-spacing: 0.05em; text-transform: uppercase; }
 .insights-box p { font-size: 13px; line-height: 1.6; color: #a5b5ab; margin: 0; }
+
+.posture-badge {
+  position: absolute;
+  z-index: 6;
+  top: 34px;
+  left: 34px;
+  padding: 10px 18px;
+  border-radius: 4px;
+  font: 11px 'DM Mono', monospace;
+  font-weight: bold;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  transition: all 0.3s ease;
+}
+.posture-badge.aligned {
+  color: #b9f25f;
+  background: rgba(185, 242, 95, 0.12);
+  box-shadow: 0 0 20px rgba(185, 242, 95, 0.15);
+}
+.posture-badge.slouching {
+  color: #ff7657;
+  background: rgba(255, 118, 87, 0.12);
+  box-shadow: 0 0 20px rgba(255, 118, 87, 0.15);
+}
+.posture-badge.calibrating, .posture-badge.searching, .posture-badge.idle {
+  color: #a9b6ac;
+  background: rgba(169, 182, 172, 0.12);
+}
