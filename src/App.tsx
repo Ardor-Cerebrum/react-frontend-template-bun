@@ -115,7 +115,12 @@ export default function App() {
   }, []);
 
   const takeSnapshot = useCallback(async () => {
-    if (!active || latestRef.current.score === 0) return;
+    if (!active) return;
+    if (latestRef.current.score === 0 || latestRef.current.state === 'searching') {
+      setError('Cannot capture snapshot: No person detected in frame. Please adjust your camera and come into view.');
+      return;
+    }
+    setError('');
     const now = new Date();
     const currentScore = latestRef.current.score;
     const currentState = latestRef.current.state;
@@ -175,6 +180,7 @@ export default function App() {
         drawPose(canvas, points, posture);
       } else {
         canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height); setState('searching');
+        latestRef.current = { score: 0, state: 'searching' };
       }
     } catch { /* transient frame errors are safe to skip */ }
     frameRef.current = requestAnimationFrame(renderLoop);
