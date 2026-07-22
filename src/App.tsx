@@ -3,7 +3,7 @@ import { FilesetResolver, PoseLandmarker, type NormalizedLandmark } from '@media
 import { Camera, Check, Eye, Focus, Gauge, LockKeyhole, Pause, Play, RotateCcw, ScanFace, Sparkles } from 'lucide-react';
 import { supabase, isConfigured } from './supabase';
 
-type PostureState = 'idle' | 'calibrating' | 'aligned' | 'slouching' | 'searching';
+type PostureState = 'idle' | 'calibrating' | 'aligned' | 'warning' | 'slouching' | 'searching';
 type Snapshot = { id: number; time: string; score: number; state: PostureState; energy: number; focus: number; strain: number };
 type CheckIn = { energy: number; focus: number; strain: number };
 
@@ -63,7 +63,7 @@ function scorePose(points: NormalizedLandmark[], baseline: number | null) {
 function drawPose(canvas: HTMLCanvasElement, points: NormalizedLandmark[], state: PostureState) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  const color = state === 'slouching' ? '#ff7657' : '#b9f25f';
+  const color = state === 'slouching' ? '#ff7657' : state === 'warning' ? '#ffb04f' : '#b9f25f';
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.strokeStyle = color; ctx.lineWidth = 5; ctx.shadowColor = color; ctx.shadowBlur = 14;
@@ -225,7 +225,7 @@ export default function App() {
           }
         }
 
-        const posture: PostureState = baselineRef.current ? (reading.score < 72 ? 'slouching' : 'aligned') : 'calibrating';
+        const posture: PostureState = baselineRef.current ? (reading.score >= 80 ? 'aligned' : reading.score >= 60 ? 'warning' : 'slouching') : 'calibrating';
         setScore(reading.score); setState(posture); latestRef.current = { score: reading.score, state: posture };
         drawPose(canvas, points, posture);
       } else {
@@ -298,7 +298,7 @@ export default function App() {
           {!active && <div className="camera-empty"><div className="orb"><ScanFace size={48} /></div><p>Your posture appears here</p><span>Center your head and shoulders in frame</span></div>}
           {active && (
             <div className={`posture-badge ${state}`}>
-              {state === 'aligned' ? 'GOOD' : state === 'slouching' ? 'BAD' : state === 'searching' ? 'SEARCHING' : 'CALIBRATING'}
+              {state === 'aligned' ? 'GOOD' : state === 'warning' ? 'MIDDLE' : state === 'slouching' ? 'BAD' : state === 'searching' ? 'SEARCHING' : 'CALIBRATING'}
             </div>
           )}
           <div className="scanline" />
@@ -308,9 +308,9 @@ export default function App() {
 
         <div className="coach">
           <p className="eyebrow"><Sparkles size={14} /> LIVE COACH</p>
-          <h1>{message}</h1>
-          <p className="coach-copy">{detail}</p>
-          <div className={`status status-${state}`}><span>{state === 'aligned' ? <Check size={17} /> : <Gauge size={17} />}</span><div><b>{state === 'slouching' ? 'Slouch detected' : state === 'aligned' ? 'Aligned posture' : 'Ready when you are'}</b><small>{baseline ? 'Compared with your personal tall baseline' : 'Calibrate once from a comfortable tall seat'}</small></div></div>
+          <h1>{state === 'slouching' ? 'Lift through the crown' : state === 'warning' ? 'Lean back slightly' : state === 'aligned' ? 'You’re stacked nicely' : state === 'searching' ? 'Come into frame' : state === 'calibrating' ? 'Sit tall, then set your baseline' : 'Your quiet posture companion'}</h1>
+          <p className="coach-copy">{state === 'slouching' ? 'Ease your shoulders back and float your ears above them.' : state === 'warning' ? 'Your chest has drifted slightly forward. Float it up and relax your chin.' : state === 'aligned' ? 'Breathe, soften your jaw, and keep this easy shape.' : state === 'calibrating' ? 'Analyzing sitting height... Auto-calibrating in 3 seconds.' : 'Your camera stays on this device. No photos are uploaded.'}</p>
+          <div className={`status status-${state}`}><span>{state === 'aligned' ? <Check size={17} /> : state === 'warning' ? <Sparkles size={17} /> : <Gauge size={17} />}</span><div><b>{state === 'slouching' ? 'Slouch detected' : state === 'warning' ? 'Slight forward lean' : state === 'aligned' ? 'Aligned posture' : 'Ready when you are'}</b><small>{baseline ? 'Compared with your personal tall baseline' : 'Calibrate once from a comfortable tall seat'}</small></div></div>
           <div className="actions">
             {!active ? <button className="primary" onClick={start} disabled={loading}><Camera size={19} />{loading ? 'WAKING THE COACH…' : 'START CAMERA'}</button> : <button className="primary" onClick={calibrate}><RotateCcw size={18} />SET TALL BASELINE</button>}
             {active && <button className="icon-button" onClick={stop} title="Pause camera"><Pause size={19} /></button>}
@@ -335,7 +335,7 @@ export default function App() {
           <div className="section-title"><div><p className="eyebrow">YOUR WORK RHYTHM</p><h2>Posture moments</h2></div><button className="text-button" onClick={takeSnapshot} disabled={!active}>CAPTURE NOW</button></div>
           <div className="next"><div className="pulse"><Play size={16} /></div><div><small>NEXT PRIVATE CHECK</small><strong>{String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}</strong></div><p>Every 15 min<br/><span>landmarks only</span></p></div>
           <div className="timeline">
-            {snapshots.length === 0 ? <div className="empty-timeline"><i /><p>Your posture pattern will gently gather here.</p></div> : snapshots.slice(0, 5).map((item) => <div className="moment" key={item.id}><span className={item.score < 72 ? 'low' : ''}>{item.score}</span><div><b>{item.time}</b><small>{item.state === 'slouching' ? 'Rounded moment' : 'Open posture'} · energy {item.energy}% · focus {item.focus}%</small></div></div>)}
+            {snapshots.length === 0 ? <div className="empty-timeline"><i /><p>Your posture pattern will gently gather here.</p></div> : snapshots.slice(0, 5).map((item) => <div className="moment" key={item.id}><span className={item.state === 'slouching' ? 'low' : item.state === 'warning' ? 'mid' : ''}>{item.score}</span><div><b>{item.time}</b><small>{item.state === 'slouching' ? 'Rounded moment' : item.state === 'warning' ? 'Slight lean' : 'Open posture'} · energy {item.energy}% · focus {item.focus}%</small></div></div>)}
           </div>
           <div className="summary"><span>Today’s shape</span><b>{snapshots.length ? `${average}% aligned on average` : 'Waiting for your first moment'}</b></div>
           <div className="insights-box">
