@@ -12,6 +12,40 @@ const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/w
 const INTERVAL_MS = 15 * 60 * 1000;
 const CONNECTIONS: [number, number][] = [[0,11],[0,12],[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24]];
 
+function getPostureInsights(snapshots: Snapshot[]) {
+  if (snapshots.length === 0) {
+    return {
+      title: "GATHERING SPINAL INSIGHTS",
+      text: "Take your first posture snapshot or self check-in to generate real-time alignment and fatigue trends."
+    };
+  }
+  
+  const averageScore = Math.round(snapshots.reduce((sum, item) => sum + item.score, 0) / snapshots.length);
+  const slouchCount = snapshots.filter(s => s.state === 'slouching').length;
+  const avgEnergy = Math.round(snapshots.reduce((sum, item) => sum + item.energy, 0) / snapshots.length);
+  const avgFocus = Math.round(snapshots.reduce((sum, item) => sum + item.focus, 0) / snapshots.length);
+  const avgStrain = Math.round(snapshots.reduce((sum, item) => sum + item.strain, 0) / snapshots.length);
+  
+  let title = "OPTIMAL SPINAL ALIGNMENT";
+  let text = `Your posture averages ${averageScore}% aligned. You are maintaining a healthy spinal stack, which is keeping your focus levels high (${avgFocus}%).`;
+  
+  if (slouchCount > 0) {
+    const percentage = Math.round((slouchCount / snapshots.length) * 100);
+    title = "FATIGUE COLLAPSE DETECTED";
+    text = `You slouched in ${percentage}% of checks. There is a close link between eye strain (${avgStrain}%) and forward head lean. Raising your screen 2 inches will keep your shoulders open.`;
+  } else if (averageScore < 82) {
+    title = "MILD REGULAR COMPRESSION";
+    text = `Your alignment averages ${averageScore}%. Although you aren't slouching fully, your neck has a slight forward tilt. Soften your shoulders and lean gently back.`;
+  }
+  
+  if (avgEnergy < 50) {
+    title = "LOW ENERGY POSTURE SLUMP";
+    text += ` Physical fatigue is active (${avgEnergy}%). Stand up, stretch your chest muscles for 30 seconds, and roll your shoulders back to reboot.`;
+  }
+  
+  return { title, text };
+}
+
 const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, value));
 const midpoint = (a: NormalizedLandmark, b: NormalizedLandmark) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
@@ -115,28 +149,28 @@ export default function App() {
   }, []);
 
   const takeSnapshot = useCallback(async () => {
-    if (!active) return;
-    if (latestRef.current.score === 0 || latestRef.current.state === 'searching') {
-      setError('Cannot capture snapshot: No person detected in frame. Please adjust your camera and come into view.');
-      return;
-    }
-    setError('');
-    const now = new Date();
-    const currentScore = latestRef.current.score;
-    const currentState = latestRef.current.state;
-    const currentCheckIn = checkInRef.current;
+    try {
+      if (!active) return;
+      if (latestRef.current.score === 0 || latestRef.current.state === 'searching') {
+        setError('Cannot capture snapshot: No person detected in frame. Please adjust your camera and come into view.');
+        return;
+      }
+      setError('');
+      const now = new Date();
+      const currentScore = latestRef.current.score;
+      const currentState = latestRef.current.state;
+      const currentCheckIn = checkInRef.current;
 
-    const localId = now.getTime();
-    const localTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const localId = now.getTime();
+      const localTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    setSnapshots((items) => [
-      { id: localId, time: localTime, score: currentScore, state: currentState, ...currentCheckIn },
-      ...items
-    ].slice(0, 12));
-    setNextSnapshot(INTERVAL_MS);
+      setSnapshots((items) => [
+        { id: localId, time: localTime, score: currentScore, state: currentState, ...currentCheckIn },
+        ...items
+      ].slice(0, 12));
+      setNextSnapshot(INTERVAL_MS);
 
-    if (isConfigured) {
-      try {
+      if (isConfigured) {
         const { error } = await supabase.from('posture_logs').insert([
           {
             score: currentScore,
@@ -146,10 +180,13 @@ export default function App() {
             eye_strain: currentCheckIn.strain,
           }
         ]);
-        if (error) throw error;
-      } catch (err) {
-        console.error('Failed to save log to Supabase:', err);
+        if (error) {
+          setError(`Supabase Error: ${error.message}. Ensure table "posture_logs" is created in SQL editor.`);
+        }
       }
+    } catch (err) {
+      console.error('Snapshot failed:', err);
+      setError('Snapshot failed: ' + (err instanceof Error ? err.message : String(err)));
     }
   }, [active]);
 
@@ -280,6 +317,10 @@ export default function App() {
             {snapshots.length === 0 ? <div className="empty-timeline"><i /><p>Your posture pattern will gently gather here.</p></div> : snapshots.slice(0, 5).map((item) => <div className="moment" key={item.id}><span className={item.score < 72 ? 'low' : ''}>{item.score}</span><div><b>{item.time}</b><small>{item.state === 'slouching' ? 'Rounded moment' : 'Open posture'} · energy {item.energy}% · focus {item.focus}%</small></div></div>)}
           </div>
           <div className="summary"><span>Today’s shape</span><b>{snapshots.length ? `${average}% aligned on average` : 'Waiting for your first moment'}</b></div>
+          <div className="insights-box">
+            <h3><Sparkles size={16} /> {insights.title}</h3>
+            <p>{insights.text}</p>
+          </div>
         </div>
       </section>
     </main>
