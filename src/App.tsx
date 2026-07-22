@@ -96,6 +96,7 @@ export default function App() {
   const baselineRef = useRef<number | null>(null);
   const latestRef = useRef({ score: 0, state: 'searching' as PostureState });
   const checkInRef = useRef<CheckIn>({ energy: 72, focus: 78, strain: 28 });
+  const calibrationFramesRef = useRef<number[]>([]);
   const [active, setActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [state, setState] = useState<PostureState>('idle');
@@ -211,7 +212,19 @@ export default function App() {
       const result = model.detectForVideo(video, performance.now());
       const points = result.landmarks[0];
       if (points) {
-        const reading = scorePose(points, baselineRef.current);
+        let reading = scorePose(points, baselineRef.current);
+
+        if (!baselineRef.current) {
+          calibrationFramesRef.current.push(reading.neckLength);
+          if (calibrationFramesRef.current.length >= 20) {
+            const sorted = [...calibrationFramesRef.current].sort((a, b) => a - b);
+            const tallBaseline = sorted[Math.floor(sorted.length * 0.90)];
+            baselineRef.current = tallBaseline;
+            setBaseline(tallBaseline);
+            reading = scorePose(points, tallBaseline);
+          }
+        }
+
         const posture: PostureState = baselineRef.current ? (reading.score < 72 ? 'slouching' : 'aligned') : 'calibrating';
         setScore(reading.score); setState(posture); latestRef.current = { score: reading.score, state: posture };
         drawPose(canvas, points, posture);
@@ -246,6 +259,8 @@ export default function App() {
   const stop = () => {
     cancelAnimationFrame(frameRef.current); streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null; setActive(false); setState('idle'); setScore(0);
+    baselineRef.current = null; setBaseline(null);
+    calibrationFramesRef.current = [];
     canvasRef.current?.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
   };
 
@@ -258,7 +273,7 @@ export default function App() {
   };
 
   const message = state === 'slouching' ? 'Lift through the crown' : state === 'aligned' ? 'You’re stacked nicely' : state === 'searching' ? 'Come into frame' : state === 'calibrating' ? 'Sit tall, then set your baseline' : 'Your quiet posture companion';
-  const detail = state === 'slouching' ? 'Ease your shoulders back and float your ears above them.' : state === 'aligned' ? 'Breathe, soften your jaw, and keep this easy shape.' : 'Your camera stays on this device. No photos are uploaded.';
+  const detail = state === 'slouching' ? 'Ease your shoulders back and float your ears above them.' : state === 'aligned' ? 'Breathe, soften your jaw, and keep this easy shape.' : state === 'calibrating' ? 'Analyzing sitting height... Auto-calibrating in 3 seconds.' : 'Your camera stays on this device. No photos are uploaded.';
   const average = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.score, 0) / snapshots.length) : score;
   const insights = getPostureInsights(snapshots);
   const mins = Math.floor(nextSnapshot / 60000); const secs = Math.floor((nextSnapshot % 60000) / 1000);
